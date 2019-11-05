@@ -19,6 +19,7 @@ typedef struct {
 	CARD_ACCESS_LEVEL access_level;
 	SESSION_STATUS session_status;
 	char number[100];
+	char fullname[100];
 
 } ACCESSCARD;
 

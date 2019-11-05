@@ -16,11 +16,11 @@
 bool RegisterNewAccessCardPanel(SERIALPORT port, CARD_INVENTORY* card_inventory_state) {
 	time_t now;
 	time(&now);
-
-	INPUT_RESULT valid_entry = INPUT_RESULT_NO_INPUT;
 	short new_card_index;
 	char new_card_number[50];
 	char access_is_granted_input[5];
+	char fullname_input[100];
+	INPUT_RESULT valid_entry = INPUT_RESULT_NO_INPUT;
 	
 	new_card_number[0] = 0;
 
@@ -33,6 +33,7 @@ bool RegisterNewAccessCardPanel(SERIALPORT port, CARD_INVENTORY* card_inventory_
 		
 	printf("--- [SERIAL]: Card number: %s\n", new_card_number);
 
+
 	if (AccessCardExists(card_inventory_state, new_card_number)) {
 		printf("--- [WARNING]: This card number is occupied\n");
 		return false;
@@ -40,6 +41,12 @@ bool RegisterNewAccessCardPanel(SERIALPORT port, CARD_INVENTORY* card_inventory_
 		new_card_index = GetIndexForNewAccessCard(card_inventory_state);
 	}
 
+	while (valid_entry != INPUT_RESULT_OK) {
+		valid_entry = GetInput("--- Enter the full name for this user -> ", 
+			fullname_input, sizeof(fullname_input)
+		);
+	}
+	
 	GetInput("--- Does this card have access to unlock? (y/n) -> ",
 		access_is_granted_input, sizeof(access_is_granted_input));
 
@@ -58,6 +65,7 @@ bool RegisterNewAccessCardPanel(SERIALPORT port, CARD_INVENTORY* card_inventory_
 	card_inventory_state->array_of_access_cards[new_card_index].session_status = IS_SIGNED_OUT;
 	card_inventory_state->array_of_access_cards[new_card_index].registration_timestamp = now;
 	strcpy(card_inventory_state->array_of_access_cards[new_card_index].number, new_card_number);
+	strcpy(card_inventory_state->array_of_access_cards[new_card_index].fullname, fullname_input);
 
 	if (AccessCardExists(card_inventory_state, new_card_number)) {
 		return true;
@@ -84,6 +92,7 @@ void ListAllAccessCards(CARD_INVENTORY* card_inventory_state) {
 		strftime(temp_datetime_buffer, sizeof(temp_datetime_buffer), "%a %Y-%m-%d %H:%M:%S", &temp_timestruct);
 
 		printf(" * Card number:\t\t\t\t%s\n",card_inventory_state->array_of_access_cards[i].number);
+		printf(" * Registered to:\t\t\t%s\n",card_inventory_state->array_of_access_cards[i].fullname);
 		printf(" * Card has access to unlock:\t\t");
 		printf(card_inventory_state->array_of_access_cards[i].access_level == ACCESS_GRANTED ? "true\n" : "false\n");
 
@@ -104,91 +113,52 @@ void RemoteOpenDoor(SERIALPORT port) {
 	for (char i = 0; i < 4; i++) {
 		SerialReadToNewLine(port, buf, sizeof(buf));
 		printf("%s\n", buf);
-		Sleep(500);
+		Sleep(1000);
 	}
 }
 
 
-bool SimulateCardScan(CARD_INVENTORY* card_inventory_state) {
-	INPUT_RESULT valid_input;
-	char card_number_to_search_for[50];
-	short card_index;
-
-	valid_input = GetInput(
-		"--- Enter card number: ",
-		card_number_to_search_for,
-		sizeof(card_number_to_search_for)
-	);
-
-	if (valid_input != INPUT_RESULT_OK) {
-		printf("--- [WARNING]: Input invalid.\n");
-		return false;
-	}
-	
-	if (!AccessCardExists(card_inventory_state, card_number_to_search_for))	{
-		printf("--- [WARNING]: The card number is not registered in the system.\n");
-		return false;
-	}
-
-	card_index = GetIndexOfAccessCard(card_inventory_state, card_number_to_search_for);
-
-	if (!card_inventory_state->array_of_access_cards[card_index].access_level == ACCESS_GRANTED) {
-		printf("--- [WARNING]: Card %s: access denied.\n", card_number_to_search_for);
-		return false;
-	}
-	
-	printf("--- [INFO]: Card %s: access granted.\n", card_number_to_search_for);
-
-	if (card_inventory_state->array_of_access_cards[card_index].session_status == IS_SIGNED_OUT) {
-		card_inventory_state->array_of_access_cards[card_index].session_status = IS_SIGNED_IN;
-	} else {
-		card_inventory_state->array_of_access_cards[card_index].session_status = IS_SIGNED_OUT;
-	}
-	return true;
-}
-
-
-bool EditAccessCardPanel(SERIALPORT port, CARD_INVENTORY* card_inventory_state)
-{
+bool EditAccessCardPanel(SERIALPORT port, CARD_INVENTORY* card_inventory_state) {
 	char access_is_granted[5];
 	char card_number_to_search_for[50];
 	short access_card_index;
-
+	char fullname_input[100];
+	INPUT_RESULT valid_entry = INPUT_RESULT_NO_INPUT;
 	card_number_to_search_for[0] = 0;
 
 	printf("\n---> You are here: [Access Card Control Panel / Edit Access Card]\n");
 	printf("\n--- [INFO]: Place the card on the reader.\n");
-	while (card_number_to_search_for[0] == 0)
-	{
+	while (card_number_to_search_for[0] == 0) {
 		SerialReadToNewLine(port, card_number_to_search_for, sizeof(card_number_to_search_for));
 	}
 
-	if (AccessCardExists(card_inventory_state, card_number_to_search_for))
-	{
+	if (AccessCardExists(card_inventory_state, card_number_to_search_for)) {
 		access_card_index = GetIndexOfAccessCard(card_inventory_state, card_number_to_search_for);
-	}
-	else
-	{
+	} else {
 		printf("\n--- [WARNING]: The card you searched for was not found");
 		return false;
 	}
 
 	printf("--- [INFO]: Editing card %s\n", card_number_to_search_for);
 
-	while (access_is_granted[0] != 'y' && access_is_granted[0] != 'n')
-	{
+	while (access_is_granted[0] != 'y' && access_is_granted[0] != 'n') {
 		GetInput(
 			"\n--- Does this card have access to unlock? (y/n) -> ",
 			access_is_granted, sizeof(access_is_granted)
 		);
 	}
 
-	if (access_is_granted[0] == 'y')
-	{
-		card_inventory_state->array_of_access_cards[access_card_index].access_level = ACCESS_GRANTED;
+	while (valid_entry != INPUT_RESULT_OK) {
+		valid_entry = GetInput("--- Enter the full name for this user -> ", 
+			fullname_input, sizeof(fullname_input)
+		);
 	}
-	else if (access_is_granted[0] == 'n')
-	{
+
+	strcpy(card_inventory_state->array_of_access_cards[access_card_index].fullname, fullname_input);
+
+	if (access_is_granted[0] == 'y') {
+		card_inventory_state->array_of_access_cards[access_card_index].access_level = ACCESS_GRANTED;
+	} else if (access_is_granted[0] == 'n') {
 		card_inventory_state->array_of_access_cards[access_card_index].access_level = ACCESS_DENIED;
 	}
 	return true;
@@ -246,8 +216,7 @@ void DeployApprovedCards(SERIALPORT port, CARD_INVENTORY* card_inventory_state) 
 	if (card_inventory_state->number_of_access_cards < 1) {
 		printf("--- [WARNING]: There are no cards in the system.");
 		return;
-	}
-	else if (number_of_granted_access_cards < 1) {
+	} else if (number_of_granted_access_cards < 1) {
 		printf("--- [WARNING]: There are no cards with sufficient priviliges in the system to deploy.");
 		return;
 	}
@@ -307,7 +276,7 @@ void MonitorMode(SERIALPORT port, CARD_INVENTORY* card_inventory_state) {
 		} 
 		
 		if (AccessCardExists(card_inventory_state, card_number_to_search_for)) {
-			Sleep(	250);
+			Sleep(250);
 			index_of_accesscard = GetIndexOfAccessCard(card_inventory_state, card_number_to_search_for);
 			printf("--- [SERIAL]: Card scanned: %s\n", card_number_to_search_for);
 		
@@ -317,11 +286,17 @@ void MonitorMode(SERIALPORT port, CARD_INVENTORY* card_inventory_state) {
 				Sleep(ARDUINO_WAIT_TIME);
 				
 				if (card_inventory_state->array_of_access_cards[index_of_accesscard].session_status == IS_SIGNED_IN) {
-					printf("--- [INFO]: Card just signed out: %s\n", card_number_to_search_for);
 					card_inventory_state->array_of_access_cards[index_of_accesscard].session_status = IS_SIGNED_OUT;
+					printf("--- [INFO]: %s just signed out, card number: %s\n", 
+						card_inventory_state->array_of_access_cards[index_of_accesscard].fullname, 
+						card_number_to_search_for
+					);
 				} else {
-					printf("--- [INFO]: Card just signed in: %s\n", card_number_to_search_for);
 					card_inventory_state->array_of_access_cards[index_of_accesscard].session_status = IS_SIGNED_IN;
+					printf("--- [INFO]: %s just signed in, card number: %s\n", 
+						card_inventory_state->array_of_access_cards[index_of_accesscard].fullname, 
+						card_number_to_search_for
+					);
 				}
 			} else {
 				printf("--- [INFO]: Access denied.\n");
@@ -371,7 +346,7 @@ short MainPanel(SERIALPORT port, CARD_INVENTORY* card_inventory_state) {
 short main() {
 
 	CARD_INVENTORY card_inventory_state;
-	SERIALPORT port = SerialInit("\\\\.\\COM3");
+	SERIALPORT port = SerialInit("\\\\.\\COM4");
 	
 	if (!SerialIsConnected(port)) {
 		return;
